@@ -10,36 +10,28 @@ resource "azurerm_network_interface" "ccportal-nic" {
   }
 }
 
-resource "azurerm_virtual_machine" "ccportal" {
+resource "azurerm_linux_virtual_machine" "ccportal" {
   name                  = "ccportal"
   location              = local.create_rg ? azurerm_resource_group.rg[0].location : data.azurerm_resource_group.rg[0].location
   resource_group_name   = local.create_rg ? azurerm_resource_group.rg[0].name : data.azurerm_resource_group.rg[0].name
-  vm_size               = try(local.configuration_yml["cyclecloud"].vm_size, "Standard_D2s_v3")
+  size                  = try(local.configuration_yml["cyclecloud"].vm_size, "Standard_D2s_v3")
+  admin_username        = local.admin_username
   network_interface_ids = [
     azurerm_network_interface.ccportal-nic.id,
   ]
 
-  os_profile {
-    computer_name  = "ccportal"
-    admin_username = local.admin_username
+  admin_ssh_key {
+    username   = local.admin_username
+    public_key = tls_private_key.internal.public_key_openssh
   }
 
-  os_profile_linux_config {
-    disable_password_authentication = true
-    ssh_keys {
-      path     = "/home/${local.admin_username}/.ssh/authorized_keys"
-      key_data = tls_private_key.internal.public_key_openssh
-    }
+  os_disk {
+    caching              = "ReadWrite"
+    create_option        = "FromImage"
+    storage_account_type = "Standard_LRS"
   }
 
-  storage_os_disk {
-    name              = "ccportal-osdisk"
-    create_option     = "FromImage"
-    caching           = "ReadWrite"
-    managed_disk_type = "Standard_LRS"
-  }
-
-  storage_image_reference {
+  source_image_reference {
     publisher = try(local.configuration_yml["cyclecloud"].image.publisher,"azurecyclecloud")
     offer     = try(local.configuration_yml["cyclecloud"].image.offer, "azure-cyclecloud")
     sku       = try(local.configuration_yml["cyclecloud"].image.sku, "cyclecloud-81")
